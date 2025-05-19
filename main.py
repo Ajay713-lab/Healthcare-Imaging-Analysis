@@ -1,162 +1,63 @@
+Program:
+# Healthcare Imaging Analysis – Brain Anomaly & Hand Fracture Detection
 import cv2
-import os
 import numpy as np
-import smtplib
-import time
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.image import MIMEImage
-
-# Email Config
-EMAIL_SENDER = "youtajesh001@gmail.com"
-EMAIL_RECEIVER = 'dumpmail7g@gmail.com'
-EMAIL_SUBJECT = '⚠️ Surveillance Alert: Unknown Person Detected'
-APP_PASSWORD = 'fwkc tqpb laxi zalx'
-
-# Paths and Parameters
-KNOWN_FACES_DIR = "known_faces"
-HIST_THRESH = 0.75
-STANDARD_FACE_SIZE = (100, 100)
-ALERT_COOLDOWN_SECONDS = 60  # delay between alerts
-
-# Load Haar cascade
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-
-# Last alert time
-last_alert_time = 0
-
-def send_alert_email(similarity_score, face_image_path):
-    msg = MIMEMultipart()
-    msg['From'] = EMAIL_SENDER
-    msg['To'] = EMAIL_RECEIVER
-    msg['Subject'] = EMAIL_SUBJECT
-
-    body = f"""
-    ALERT!
-
-    An unknown person was detected by the surveillance system.
-
-    Similarity Score: {similarity_score:.2f}
-    Action may be required.
-
-    – Smart Surveillance Bot
-    """
-    msg.attach(MIMEText(body, 'plain'))
-
-    try:
-        with open(face_image_path, 'rb') as f:
-            img_data = f.read()
-        image = MIMEImage(img_data, name=os.path.basename(face_image_path))
-        msg.attach(image)
-
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(EMAIL_SENDER, APP_PASSWORD)
-        server.send_message(msg)
-        server.quit()
-        print("[✓] Email alert with photo sent.")
-    except Exception as e:
-        print(f"[✖] Failed to send email: {e}")
-
-def enhance_image(img):
-    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-    l, a, b = cv2.split(lab)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    cl = clahe.apply(l)
-    enhanced = cv2.merge((cl, a, b))
-    return cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
-
-def get_face_histogram(face_img):
-    face_img = cv2.resize(face_img, STANDARD_FACE_SIZE)
-    face_img = cv2.GaussianBlur(face_img, (3, 3), 0)
-    hsv = cv2.cvtColor(face_img, cv2.COLOR_BGR2HSV)
-    hist = cv2.calcHist([hsv], [0], None, [180], [0, 180])
-    cv2.normalize(hist, hist, 0, 255, cv2.NORM_MINMAX)
-    return hist
-
-# Load known faces
-known_faces = []
-print("[INFO] Loading known faces...")
-
-for filename in os.listdir(KNOWN_FACES_DIR):
-    if filename.lower().endswith(('.jpg', '.png', '.jpeg')):
-        path = os.path.join(KNOWN_FACES_DIR, filename)
-        name = os.path.splitext(filename)[0]
-
-        img = cv2.imread(path)
-        img = enhance_image(img)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, 1.1, 5)
-
-        if len(faces) == 0:
-            print(f"[!] No face in {filename}, skipping.")
-            continue
-
-        x, y, w, h = faces[0]
-        if w < 50 or h < 50:
-            print(f"[!] Face in {filename} too small, skipping.")
-            continue
-
-        pad = 10
-        face_img = img[max(0, y-pad):y+h+pad, max(0, x-pad):x+w+pad]
-        hist = get_face_histogram(face_img)
-
-        known_faces.append({"name": name, "hist": hist})
-
-print(f"[✓] Loaded {len(known_faces)} known faces.\n")
-
-# Start webcam
-cap = cv2.VideoCapture(0)
-print("[INFO] Surveillance started. Press 'q' to quit.")
-
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
-
-    enhanced = enhance_image(frame)
-    gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, 1.1, 6)
-
-    for (x, y, w, h) in faces:
-        if w < 60 or h < 60:
-            continue
-
-        pad = 10
-        face_img = enhanced[max(0, y-pad):y+h+pad, max(0, x-pad):x+w+pad]
-        face_hist = get_face_histogram(face_img)
-
-        best_score = 0
-        best_name = "Unknown"
-
-        for kf in known_faces:
-            score = cv2.compareHist(face_hist, kf["hist"], cv2.HISTCMP_CORREL)
-            if score > best_score:
-                best_score = score
-                best_name = kf["name"]
-
-        if best_score >= HIST_THRESH:
-            label = f"{best_name} ({best_score:.2f})"
-            color = (0, 255, 0)
-        else:
-            label = f"Unknown ({best_score:.2f})"
-            color = (0, 0, 255)
-            print(f"[!] ALERT: Unknown person detected! Similarity: {best_score:.2f}")
-
-            current_time = time.time()
-            if current_time - last_alert_time > ALERT_COOLDOWN_SECONDS:
-                unknown_face_path = "unknown_detected.jpg"
-                cv2.imwrite(unknown_face_path, face_img)
-                send_alert_email(best_score, unknown_face_path)
-                last_alert_time = current_time
-
-        cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
-        cv2.putText(frame, label, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
-
-    cv2.imshow("Smart Surveillance", frame)
-
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-cap.release()
+# -------------------- Brain Anomaly Detection --------------------
+print("🔍 Starting Brain X-ray Anomaly Detection...")
+brain_img = cv2.imread('brain.jpeg', cv2.IMREAD_GRAYSCALE)
+if brain_img is None:
+print("❌ Brain image not found!")
+else:
+blurred_brain = cv2.GaussianBlur(brain_img, (5, 5), 0)
+_, thresh = cv2.threshold(blurred_brain, 200, 255, cv2.THRESH_BINARY)
+contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL,
+cv2.CHAIN_APPROX_SIMPLE)
+brain_output = cv2.cvtColor(brain_img, cv2.COLOR_GRAY2BGR)
+anomaly_found = False
+for cnt in contours:
+area = cv2.contourArea(cnt)
+if area > 200:
+anomaly_found = True
+x, y, w, h = cv2.boundingRect(cnt)
+cv2.rectangle(brain_output, (x, y), (x + w, y + h), (0, 0, 255), 2)
+cv2.putText(brain_output, "Possible Anomaly", (x, y - 10),
+cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+if anomaly_found:
+print("✅ Possible anomalies detected in brain X-ray.")
+else:
+print("✅ No significant anomalies detected in brain X-ray.")
+cv2.imshow("Brain Anomaly Detection", brain_output)
+# -------------------- Hand Fracture Detection --------------------
+print("\n🔍 Starting Hand X-ray Fracture Detection...")
+hand_img = cv2.imread('handfracture.jpeg', cv2.IMREAD_GRAYSCALE)
+if hand_img is None:
+print("❌ Hand X-ray image not found!")
+else:
+hand_img = cv2.resize(hand_img, (500, 500))
+blurred_hand = cv2.GaussianBlur(hand_img, (5, 5), 0)
+edges = cv2.Canny(blurred_hand, 50, 150)
+kernel = np.ones((5, 5), np.uint8)
+dilated = cv2.dilate(edges, kernel, iterations=1)
+contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL,
+cv2.CHAIN_APPROX_SIMPLE)
+hand_output = cv2.cvtColor(hand_img, cv2.COLOR_GRAY2BGR)
+fracture_found = False
+for cnt in contours:
+area = cv2.contourArea(cnt)
+length = cv2.arcLength(cnt, True)
+if area < 1000 and length > 200:
+fracture_found = True
+x, y, w, h = cv2.boundingRect(cnt)
+cv2.rectangle(hand_output, (x, y), (x + w, y + h), (0, 0, 255), 2)
+cv2.putText(hand_output, "Possible Fracture", (x, y - 10),
+cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+if fracture_found:
+print("✅ Possible fractures detected in hand X-ray.")
+else:
+print("✅ No significant fractures detected in hand X-ray.")
+cv2.imshow("Original Hand X-ray", hand_img)
+cv2.imshow("Edge Map", edges)
+cv2.imshow("Hand Fracture Detection", hand_output)
+# -------------------- Display All --------------------
+cv2.waitKey(0)
 cv2.destroyAllWindows()
